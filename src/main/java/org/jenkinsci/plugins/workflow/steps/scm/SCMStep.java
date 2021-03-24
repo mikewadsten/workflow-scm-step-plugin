@@ -32,6 +32,7 @@ import hudson.model.TaskListener;
 import hudson.model.listeners.SCMListener;
 import hudson.scm.SCM;
 import hudson.scm.SCMRevisionState;
+import hudson.util.FormValidation;
 import java.io.File;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -40,20 +41,27 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import javax.annotation.Nonnull;
+import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.plugins.workflow.actions.LabelAction;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.Step;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.jenkinsci.plugins.workflow.steps.StepDescriptor;
 import org.jenkinsci.plugins.workflow.steps.StepExecution;
 import org.jenkinsci.plugins.workflow.steps.SynchronousNonBlockingStepExecution;
 import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.QueryParameter;
 
 /**
  * A step which uses some kind of {@link SCM}.
  */
 public abstract class SCMStep extends Step {
 
+    private static final int MAX_LABEL_LENGTH = 100;
+
     private boolean poll = true;
     private boolean changelog = true;
+    private String label;
 
     public boolean isPoll() {
         return poll;
@@ -71,7 +79,18 @@ public abstract class SCMStep extends Step {
         this.changelog = changelog;
     }
 
+    public String getLabel() {
+        return label;
+    }
+
+    @DataBoundSetter public void setLabel(String label) {
+        this.label = label;
+    }
+
     @Override public StepExecution start(StepContext context) throws Exception {
+        if (this.label != null && !this.label.isEmpty()) {
+            context.get(FlowNode.class).addAction(new LabelAction(StringUtils.left(this.label, 100)));
+        }
         return new StepExecutionImpl(this, context);
     }
 
@@ -163,6 +182,13 @@ public abstract class SCMStep extends Step {
 
         @Override public Set<? extends Class<?>> getRequiredContext() {
             return ImmutableSet.of(Run.class, FilePath.class, TaskListener.class, Launcher.class);
+        }
+
+        public FormValidation doCheckLabel(@QueryParameter String label) {
+            if (label != null && label.length() > MAX_LABEL_LENGTH) {
+                return FormValidation.error("Label size exceeds maximum of " + MAX_LABEL_LENGTH + " characters.");
+            }
+            return FormValidation.ok();
         }
 
     }
